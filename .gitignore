@@ -12,3 +12,4 @@ ENV/
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 
+__pycache__/
