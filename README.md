@@ -1,0 +1,3 @@
+This repo is a productivity automation system that closes the feedback loop between task completion and rewards by automatically monitoring Trello cards and instantly logging their story points to Habitica with notifications, making task completion more motivating and faster.
+
+it monitors Trello cards for changes in their status and automatically logs the story points to Habitica when a card is moved to the "Done" list. It also sends notifications to the user about the completed tasks.
