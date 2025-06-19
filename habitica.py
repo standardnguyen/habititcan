@@ -62,6 +62,25 @@ class HabiticaAPI:
             "x-client": f"{self.user_id}-PythonLibrary",
             "Content-Type": "application/json"
         }
+
+    def get_profile(self, delay: float = 2.0) -> Dict[str, Any]:
+        """
+        Get user's profile information.
+        
+        Returns:
+            Dict containing user profile data
+        """
+        url = f"{self.base_url}/user"
+
+        if delay > 0:
+            time.sleep(delay)
+
+        try:
+            response = requests.get(url, headers=self.headers)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            return {"success": False, "error": str(e)}
     
     def score_habit(
         self, 
@@ -298,6 +317,19 @@ class HabiticaAPI:
         Returns:
             Dict containing results of all doot scoring
         """
+        response = self.get_profile()
+        data = response['data']
+
+        if not response.get('success'):
+            if verbose:
+                print(f"❌ Failed to get user profile: {response.get('error', 'Unknown error')}")
+            return {"success": False, "error": response.get('error', 'Unknown error')}
+
+        starting_stats = {}
+        starting_stats['exp'] = data['stats']['exp']
+        starting_stats['gp'] = data['stats']['gp']
+        starting_stats['level'] = data['stats']['lvl']
+
         if verbose:
             print(f"📊 Logging {story_points} story points...")
         
@@ -325,13 +357,33 @@ class HabiticaAPI:
         if verbose:
             print(f"✅ Logged {successful_scores}/{len(results)} doots successfully")
         
+        # Get final stats after scoring
+        response = self.get_profile()
+        data = response['data']
+
+        if not response.get('success'):
+            if verbose:
+                print(f"❌ Failed to get user profile: {response.get('error', 'Unknown error')}")
+            return {"success": False, "error": response.get('error', 'Unknown error')}
+
+        ending_stats = {}
+        ending_stats['exp'] = data['stats']['exp']
+        ending_stats['gp'] = data['stats']['gp']
+        ending_stats['level'] = data['stats']['lvl']
+
+        stat_deltas = {
+            'exp': ending_stats['exp'] - starting_stats['exp'],
+            'gp': ending_stats['gp'] - starting_stats['gp'],
+            'level': ending_stats['level'] - starting_stats['level']
+        }
+
         return {
             "success": successful_scores == len(results),
             "story_points": story_points,
             "difficulty_breakdown": difficulties,
             "results": results,
             "successful_scores": successful_scores,
-            "total_attempts": len(results)
+            "stat_deltas": stat_deltas
         }
 
 
