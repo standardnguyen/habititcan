@@ -10,6 +10,7 @@ import json
 from typing import Dict, List, Set, Tuple, Optional
 import os
 from dotenv import load_dotenv
+import random
 
 
 class TrelloListMonitor:
@@ -50,6 +51,105 @@ class TrelloListMonitor:
             raise ValueError("TRELLO_LIST_ID not provided and not found in environment variables")
             
         self.base_url = "https://api.trello.com/1"
+
+        # we want to get the custom field for 'Alter' and the dictionary of alters
+        self.alter_custom_field_id, self.alters = self.get_alter_info()
+
+
+    def get_alter_info(self) -> Tuple[float, str]:
+        print("fetching alter information...")
+        custom_fields = self.get_custom_fields()
+
+        alters = {}
+
+        alter_custom_field_id = None
+        for custom_field_id in custom_fields:
+            custom_field = custom_fields[custom_field_id]
+            # print(f"Custom Field: {custom_field['name']} (ID: {custom_field['id']})")
+            if custom_field['name'] == 'Alter':
+                alter_custom_field_id = custom_field_id
+                print(f"Custom Field: {custom_field['name']} (ID: {custom_field['id']})")
+
+                for option in custom_field['options']:
+                    print(option['id'], option['value']['text'])
+                    alters[option['value']['text']] = option['id']
+                break
+        
+        # we want to return the custom field id for 'Alter' and the dictionary of alters
+        return alter_custom_field_id, alters
+    
+    # we want a function to randomly select an alter from the alters dictionary
+    def get_random_alter(self) -> str:
+        """
+        Get a random alter from the alters dictionary.
+        
+        Returns:
+            str: A random alter name
+        """
+        if not self.alters:
+            raise ValueError("No alters available")
+        return random.choice(list(self.alters.keys()))
+
+
+    def get_custom_fields(self) -> Dict[str, Dict]:
+        """
+        Fetch all custom fields for the board containing the monitored list.
+        
+        Returns:
+            Dict[str, Dict]: Dictionary with custom field IDs as keys and field definitions as values
+            
+        Raises:
+            requests.RequestException: If the API request fails
+        """
+        # Get board ID from the list
+        board_url = f"{self.base_url}/lists/{self.list_id}/board"
+        params = {
+            'key': self.api_key,
+            'token': self.token,
+            'fields': 'id'
+        }
+        
+        response = requests.get(board_url, params=params)
+        response.raise_for_status()
+        
+        board_id = response.json()['id']
+        
+        # Fetch custom fields for the board
+        cf_url = f"{self.base_url}/boards/{board_id}/customFields"
+        cf_params = {
+            'key': self.api_key,
+            'token': self.token
+        }
+        
+        cf_response = requests.get(cf_url, params=cf_params)
+        cf_response.raise_for_status()
+        
+        return {cf['id']: cf for cf in cf_response.json()}
+    
+    def get_custom_field_items_for_card(self, card_id: str) -> Dict[str, Dict]:
+        """
+        Fetch all custom field items for a specific card.
+        
+        Args:
+            card_id (str): The ID of the card to get custom fields for
+            
+        Returns:
+            Dict[str, Dict]: Dictionary of custom field items
+            
+        Raises:
+            requests.RequestException: If the API request fails
+        """
+        url = f"{self.base_url}/cards/{card_id}/customFieldItems"
+        params = {
+            'key': self.api_key,
+            'token': self.token
+        }
+        
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        
+        items = response.json()
+        return {item['idCustomField']: item for item in items}
         
     def get_cards(self) -> Dict[str, Dict]:
         """
@@ -290,9 +390,12 @@ class TrelloListMonitor:
             if cf_def:
                 field_name = cf_def['name']
                 field_type = cf_def['type']
+                print(f"Processing custom field ID: {cf_id}, Name: {field_name}, Type: {field_type}")
+
                 
                 # Extract value based on field type
                 value = None
+                # print(f"Processing custom field: {field_name} (ID: {cf_id}, Type: {field_type}), {cf_item}")
                 if 'value' in cf_item:
                     if field_type == 'text':
                         value = cf_item['value'].get('text')
@@ -304,11 +407,11 @@ class TrelloListMonitor:
                         value = cf_item['value'].get('checked')
                     elif field_type == 'list':
                         # For dropdown lists, get the selected option
-                        option_id = cf_item['value'].get('option')
-                        if option_id and 'options' in cf_def:
-                            option = next((opt for opt in cf_def['options'] 
-                                         if opt['id'] == option_id), None)
-                            value = option['value']['text'] if option else option_id
+                        value = cf_item['value']#.get('option')
+                        # if option_id and 'options' in cf_def:
+                        #     option = next((opt for opt in cf_def['options'] 
+                        #                  if opt['id'] == option_id), None)
+                        #     value = option['value']['text'] if option else option_id
                 
                 custom_fields[field_name] = {
                     'value': value,
@@ -324,13 +427,26 @@ class TrelloListMonitor:
                     story_points = float(sp_value)
                 except (ValueError, TypeError):
                     story_points = 0.1  # fallback to default if conversion fails
-        
+
+        alter = None
+        alter_custom_field_id = None
+        if 'Alter' in custom_fields:
+            sp_value = custom_fields['Alter']['value']
+            if sp_value is not None:
+                try:
+                    alter = float(sp_value)
+                except (ValueError, TypeError):
+                    alter = None  # fallback to default if conversion fails
+            alter_custom_field_id = custom_fields['Alter']['id']
+
         return {
             'id': card_data['id'],
             'title': card_data['name'],
             'description': card_data.get('desc', ''),
             'custom_fields': custom_fields,
             'story_points': story_points,
+            'alter': alter,
+            'alter_custom_field_id': alter_custom_field_id,
             'frontend_url': card_frontend_url
         }
 
@@ -349,7 +465,71 @@ class TrelloListMonitor:
         cards2 = self.get_cards()
         return self.compare_cards(cards1, cards2)
 
+    def set_custom_field(self, card_id: str, custom_field_id: str, value, field_type: str = None) -> bool:
+        """
+        Set or update a custom field value on a card.
 
+        Args:
+            card_id (str): The ID of the card to update
+            custom_field_id (str): The ID of the custom field to update
+            value: The value to set (type depends on field_type)
+            field_type (str): Type of field ('text', 'number', 'date', 'checkbox', 'list')
+                            If None, will attempt to auto-detect
+
+        Returns:
+            bool: True if successful, False otherwise
+
+        Raises:
+            requests.RequestException: If the API request fails
+        """
+        # FIXED: Use "cards" instead of "card" in URL
+        url = f"{self.base_url}/cards/{card_id}/customField/{custom_field_id}/item"
+        params = {
+            'key': self.api_key,
+            'token': self.token
+        }
+        headers = {
+            'Content-Type': 'application/json'
+        }
+
+        # Auto-detect field type if not provided
+        if field_type is None:
+            if isinstance(value, bool):
+                field_type = 'checkbox'
+            elif isinstance(value, (int, float)):
+                field_type = 'number'
+            elif isinstance(value, str):
+                # Could be text or date, default to text
+                field_type = 'text'
+
+        # FIXED: Structure the value based on field type, all values must be strings
+        if field_type == 'text':
+            body = {"value": {"text": str(value)}}
+        elif field_type == 'number':
+            # FIXED: Numbers must be sent as strings
+            body = {"value": {"number": str(value)}}
+        elif field_type == 'date':
+            body = {"value": {"date": str(value)}}  # Should be ISO format string
+        elif field_type == 'checkbox':
+            # FIXED: Trello expects "true" or "false" as strings
+            body = {"value": {"checked": "true" if value else "false"}}
+        elif field_type == 'list':
+            # For dropdown lists, value should be the option ID
+            body = {"idValue": str(value)}
+        else:
+            raise ValueError(f"Unsupported field type: {field_type}")
+
+        try:
+            response = requests.put(url, params=params, headers=headers, data=json.dumps(body))
+            response.raise_for_status()
+            return True
+        except requests.RequestException as e:
+            print(f"Error setting custom field: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Response status: {e.response.status_code}")
+                print(f"Response body: {e.response.text}")
+            return False
+        
 # Convenience functions for common use cases
 def monitor_list(list_id: Optional[str] = None, interval: float = 1.0, 
                 max_iterations: Optional[int] = None):
