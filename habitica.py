@@ -7,7 +7,7 @@ A Python library for interacting with the Habitica API to score habits, manage t
 import os
 import requests
 import time
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 from dotenv import load_dotenv
 
 
@@ -22,14 +22,20 @@ class HabiticaAPI:
         # Using explicit credentials
         habitica = HabiticaAPI(user_id="your_user_id", api_token="your_token")
         
-        # Score a doot
-        habitica.score_habit("hard-doot", direction="up")
+        # With callback function for press_plus operations
+        def my_callback(result, task_id, direction):
+            print(f"Callback: {task_id} scored {direction} with result: {result['success']}")
+        
+        habitica = HabiticaAPI(callback=my_callback)
+        
+        # Score a doot (callback will be called automatically)
+        habitica.press_plus("hard-doot")
         
         # Log story points
         habitica.log_story_points(7)
     """
     
-    def __init__(self, user_id: Optional[str] = None, api_token: Optional[str] = None, load_env: bool = True):
+    def __init__(self, user_id: Optional[str] = None, api_token: Optional[str] = None, load_env: bool = True, callback: Optional[Callable[[Dict[str, Any], str, str], None]] = None):
         """
         Initialize the Habitica API client.
         
@@ -37,12 +43,15 @@ class HabiticaAPI:
             user_id: Habitica User ID. If None, will try to load from environment.
             api_token: Habitica API Token. If None, will try to load from environment.
             load_env: Whether to load environment variables from .env file.
+            callback: Optional callback function for press_plus operations. 
+                     Called with (result, task_id, direction) after each press_plus.
         """
         if load_env:
             load_dotenv()
             
         self.user_id = user_id or os.getenv('HABITICA_USER_ID')
         self.api_token = api_token or os.getenv('HABITICA_API_TOKEN')
+        self.callback = callback  # Store the callback for press_plus operations
         
         if not self.user_id:
             raise ValueError(
@@ -119,7 +128,7 @@ class HabiticaAPI:
                 if verbose:
                     self._print_score_result(result, direction, task_id)
                 
-                return {
+                final_result = {
                     "success": True,
                     "data": result.get('data', {}),
                     "notifications": result.get('notifications', []),
@@ -129,7 +138,7 @@ class HabiticaAPI:
             else:
                 if verbose:
                     print(f"❌ Failed to score doot {task_id}")
-                return {
+                final_result = {
                     "success": False,
                     "task_id": task_id,
                     "direction": direction,
@@ -139,12 +148,22 @@ class HabiticaAPI:
         except requests.exceptions.RequestException as e:
             if verbose:
                 print(f"❌ Error scoring doot {task_id}: {e}")
-            return {
+            final_result = {
                 "success": False,
                 "task_id": task_id,
                 "direction": direction,
                 "error": str(e)
             }
+        
+        # Call the callback function if provided and this is a press_plus operation
+        if self.callback and direction == "up":
+            try:
+                self.callback(final_result, task_id, direction)
+            except Exception as e:
+                if verbose:
+                    print(f"⚠️  Callback error: {e}")
+        
+        return final_result
     
     def _print_score_result(self, result: Dict, direction: str, task_id: str):
         """Print the results of scoring a doot."""
@@ -195,9 +214,14 @@ class HabiticaAPI:
         if notifications:
             print(f"   🔔 {len(notifications)} notification(s)")
     
-    def press_plus(self, task_id: str, verbose: bool = True) -> Dict[str, Any]:
+    def press_plus(
+        self, 
+        task_id: str, 
+        verbose: bool = True
+    ) -> Dict[str, Any]:
         """
         Press the + button for a doot (task component).
+        Uses the callback function specified during initialization if provided.
         
         Args:
             task_id: The task ID/alias of your doot
@@ -205,6 +229,10 @@ class HabiticaAPI:
             
         Returns:
             Dict containing success status and response details
+            
+        Note:
+            The callback function (if set during initialization) will be called 
+            automatically with (result, task_id, direction) after scoring.
         """
         return self.score_habit(task_id, "up", verbose=verbose)
     
@@ -388,12 +416,21 @@ class HabiticaAPI:
 
 
 # Convenience functions for backwards compatibility
-def press_plus(task_id: str, verbose: bool = True) -> Dict[str, Any]:
+def press_plus(
+    task_id: str, 
+    verbose: bool = True,
+    callback: Optional[Callable[[Dict[str, Any], str, str], None]] = None
+) -> Dict[str, Any]:
     """
     Convenience function to quickly score a doot positively.
     Requires HABITICA_USER_ID and HABITICA_API_TOKEN environment variables.
+    
+    Args:
+        task_id: The task ID/alias of your doot
+        verbose: Whether to print scoring results
+        callback: Optional callback function called with (result, task_id, direction)
     """
-    habitica = HabiticaAPI()
+    habitica = HabiticaAPI(callback=callback)
     return habitica.press_plus(task_id, verbose=verbose)
 
 
@@ -417,38 +454,85 @@ def log_story_points(story_points: float, verbose: bool = True) -> Dict[str, Any
 
 # Example usage
 if __name__ == "__main__":
-    # Example 1: Using the class
-    try:
-        habitica = HabiticaAPI()
-        
-        # Score a specific doot
-        result = habitica.press_plus("hard-doot")
-        
-        if result["success"]:
-            print("✅ Doot scored successfully!")
+    # Example callback functions
+    def exp_tracker(result, task_id, direction):
+        """Track experience gained from scoring doots."""
+        if result['success']:
+            exp_gained = result['data'].get('delta', 0)
+            current_exp = result['data'].get('exp', 0)
+            print(f"🎯 {task_id}: +{exp_gained:.2f} XP (Total: {current_exp:.1f})")
         else:
-            print(f"❌ Failed to score doot: {result}")
-        
-        # Log story points
-        sp_result = habitica.log_story_points(5.5)
-        print(f"Story points logged: {sp_result['successful_scores']}/{sp_result['total_attempts']}")
-        
-        # Get user stats
-        stats = habitica.get_user_stats()
-        if stats["success"]:
-            user_stats = stats["stats"]
-            print(f"Current stats - HP: {user_stats.get('hp', 0)}, "
-                  f"XP: {user_stats.get('exp', 0)}, "
-                  f"Gold: {user_stats.get('gp', 0)}")
+            print(f"❌ Failed to score {task_id}: {result.get('error', 'Unknown error')}")
+    
+    def achievement_notifier(result, task_id, direction):
+        """Notify about special achievements and drops."""
+        if result['success']:
+            notifications = result.get('notifications', [])
+            if notifications:
+                print(f"🎉 {len(notifications)} achievements unlocked from {task_id}!")
             
+            # Check for item drops
+            data = result.get('data', {})
+            tmp_data = data.get('_tmp', {})
+            if 'drop' in tmp_data:
+                item = tmp_data['drop']
+                print(f"💎 Item drop from {task_id}: {item.get('key', 'Unknown')}")
+    
+    def stats_logger(result, task_id, direction):
+        """Log detailed stats after scoring."""
+        if result['success']:
+            data = result['data']
+            stats = {
+                'HP': data.get('hp', 0),
+                'MP': data.get('mp', 0),
+                'XP': data.get('exp', 0),
+                'Gold': data.get('gp', 0),
+                'Level': data.get('lvl', 0)
+            }
+            print(f"📈 Post-{task_id} stats: {stats}")
+    
+    def combined_callback(result, task_id, direction):
+        """Multiple behaviors in one callback."""
+        exp_tracker(result, task_id, direction)
+        achievement_notifier(result, task_id, direction)
+    
+    # Example 1: Initialize with experience tracking callback
+    try:
+        print("=== Example 1: Experience Tracking Callback ===")
+        habitica_exp = HabiticaAPI(callback=exp_tracker)
+        result = habitica_exp.press_plus("hard-doot")
+        
+        # Example 2: Initialize with achievement notifications
+        print("\n=== Example 2: Achievement Notifications ===")
+        habitica_achievements = HabiticaAPI(callback=achievement_notifier)
+        result = habitica_achievements.press_plus("medium-doot")
+        
+        # Example 3: Initialize with detailed stats logging
+        print("\n=== Example 3: Stats Logging ===")
+        habitica_stats = HabiticaAPI(callback=stats_logger)
+        result = habitica_stats.press_plus("easy-doot")
+        
+        # Example 4: Combined callback behaviors
+        print("\n=== Example 4: Combined Callback Behaviors ===")
+        habitica_combined = HabiticaAPI(callback=combined_callback)
+        result = habitica_combined.press_plus("trivial-doot")
+        
+        # Example 5: Multiple press_plus calls with same callback
+        print("\n=== Example 5: Multiple Calls with Same Callback ===")
+        habitica_multi = HabiticaAPI(callback=exp_tracker)
+        for difficulty in ["easy", "medium", "hard"]:
+            print(f"Scoring {difficulty} doot...")
+            result = habitica_multi.press_plus(f"{difficulty}-doot")
+        
     except ValueError as e:
         print(f"❌ Configuration error: {e}")
     
-    # Example 2: Using convenience functions
-    success_result = press_plus("easy-doot")
-    if success_result["success"]:
-        print("✅ Quick doot scored!")
+    # Example 6: Using convenience function with callback
+    print("\n=== Example 6: Convenience Function with Callback ===")
+    success_result = press_plus("easy-doot", callback=exp_tracker)
     
-    # Example 3: Log story points with convenience function
-    log_result = log_story_points(3.0)
-    print(f"✅ Story points logged: {log_result['successful_scores']} doots scored")
+    # Example 7: No callback (backward compatibility)
+    print("\n=== Example 7: No Callback (Backward Compatible) ===")
+    habitica_normal = HabiticaAPI()
+    normal_result = habitica_normal.press_plus("hard-doot")
+    print(f"✅ Normal scoring: {normal_result['success']}")
