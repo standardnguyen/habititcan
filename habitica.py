@@ -63,7 +63,7 @@ class HabiticaAPI:
             "Content-Type": "application/json"
         }
 
-    def get_profile(self, delay: float = 2.0) -> Dict[str, Any]:
+    def get_profile(self, delay: float = 3.0) -> Dict[str, Any]:
         """
         Get user's profile information.
         
@@ -87,7 +87,7 @@ class HabiticaAPI:
         task_id: str, 
         direction: str = "up", 
         verbose: bool = True,
-        delay: float = 2.0
+        delay: float = 3.0
     ) -> Dict[str, Any]:
         """
         Score a doot (task component) using its task ID.

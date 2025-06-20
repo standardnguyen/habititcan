@@ -390,7 +390,7 @@ class TrelloListMonitor:
             if cf_def:
                 field_name = cf_def['name']
                 field_type = cf_def['type']
-                print(f"Processing custom field ID: {cf_id}, Name: {field_name}, Type: {field_type}")
+                # print(f"Processing custom field ID: {cf_id}, Name: {field_name}, Type: {field_type}")
 
                 
                 # Extract value based on field type
@@ -528,6 +528,33 @@ class TrelloListMonitor:
             if hasattr(e, 'response') and e.response is not None:
                 print(f"Response status: {e.response.status_code}")
                 print(f"Response body: {e.response.text}")
+            return Falses
+        
+    def delete_card(self, card_id: str) -> bool:
+        """
+        Delete a card by its ID.
+
+        Args:
+            card_id (str): The ID of the card to delete
+
+        Returns:
+            bool: True if deletion was successful, False otherwise
+
+        Raises:
+            requests.RequestException: If the API request fails
+        """
+        url = f"{self.base_url}/cards/{card_id}"
+        params = {
+            'key': self.api_key,
+            'token': self.token
+        }
+
+        try:
+            response = requests.delete(url, params=params)
+            response.raise_for_status()
+            return True
+        except requests.RequestException as e:
+            print(f"Error deleting card: {e}")
             return False
         
 # Convenience functions for common use cases
