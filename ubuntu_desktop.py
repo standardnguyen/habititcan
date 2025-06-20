@@ -50,7 +50,7 @@ def play_sound(sound_file):
     
     # List of audio players to try (in order of preference)
     players = [
-        ['paplay', '--volume=32768'],
+        ['paplay', '--volume=49152'],
         ['mpv', '--no-video', '--really-quiet'],
         ['ffplay', '-nodisp', '-autoexit', '-loglevel', 'quiet'],
         ['ogg123', '-q'],
@@ -123,7 +123,7 @@ def grab_sound_file_based_off_of_notification_type(event_type):
     # if the event_type is 'trival', the sound is a random choice between crumple1 2,3,4 and crumple5
     # use the random choice to select one of the crumple sounds
     if event_type == 'trivial-doot':
-        population = ['crumple1.ogg', 'crumple2.ogg', 'crumple3.ogg', 'crumple4.ogg', 'crumple5.ogg', 'crumbleLong2.ogg', 'crumbleLong1.ogg']
+        population = ['crumple1.ogg', 'crumple2.ogg', 'crumple3.ogg', 'crumple4.ogg', 'crumple5.ogg', 'crumpleLong2.ogg', 'crumpleLong1.ogg']
         sound_file = random.choice(population)
     elif event_type == 'easy-doot':
         population = ['card1.ogg', 'card3.ogg', 'chips1.ogg', 'chips2.ogg', 'cardFan2.ogg']
@@ -132,7 +132,7 @@ def grab_sound_file_based_off_of_notification_type(event_type):
         population = ['coin1.ogg', 'coin2.ogg', 'coin3.ogg', 'coin4.ogg', 'coin5.ogg', 'coin6.ogg', 'coin7.ogg']
         sound_file = random.choice(population)
     elif event_type == 'hard-doot':
-        population = ['multihit1.ogg', 'multihit2.ogg', 'foil1.ogg', 'foil2.ogg', 'holo1.ogg', 'polychrome1.ogg', 'magic_crumple3.ogg']
+        population = ['multhit1.ogg', 'multhit2.ogg', 'foil1.ogg', 'foil2.ogg', 'holo1.ogg', 'polychrome1.ogg', 'magic_crumple3.ogg']
         sound_file = random.choice(population)
     else:
         sound_file = sound_map.get(event_type, sound_map[event_type])
