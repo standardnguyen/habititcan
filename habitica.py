@@ -96,7 +96,7 @@ class HabiticaAPI:
         task_id: str, 
         direction: str = "up", 
         verbose: bool = True,
-        delay: float = 3.0
+        delay: float = 4.0
     ) -> Dict[str, Any]:
         """
         Score a doot (task component) using its task ID.
