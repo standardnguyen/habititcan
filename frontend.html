@@ -709,6 +709,18 @@
             isPlayingQueue = false;
             updateQueueStatus();
             log('Audio queue processing complete');
+            
+            // Auto-clear the stack after all audio finishes
+            setTimeout(async () => {
+                try {
+                    const response = await fetch(`${STACK_SERVER_URL}/stack`);
+                    if (response.ok) {
+                        log('Stack auto-cleared after audio completion');
+                    }
+                } catch (error) {
+                    log(`Error auto-clearing stack: ${error.message}`);
+                }
+            }, 500); // Small delay to let the final audio finish cleanly
         }
 
         // Play audio synchronously (returns promise that resolves when audio ends)
