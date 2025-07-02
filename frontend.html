@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Stack Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255,255,255,0.1);
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .status-dot.connected {
+            background: #4CAF50;
+            box-shadow: 0 0 10px #4CAF50;
+        }
+
+        .status-dot.disconnected {
+            background: #f44336;
+            box-shadow: 0 0 10px #f44336;
+        }
+
+        .stack-container {
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .stack-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .stack-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .stack-size {
+            background: rgba(255,255,255,0.2);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+
+        .stack-items {
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .stack-item {
+            background: rgba(255,255,255,0.2);
+            padding: 12px 20px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            animation: slideIn 0.3s ease;
+            border-left: 4px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .stack-item.new {
+            animation: newItem 0.6s ease;
+            transform: scale(1.02);
+        }
+
+        .stack-item.trivial {
+            border-left-color: #4CAF50;
+        }
+
+        .stack-item.easy {
+            border-left-color: #2196F3;
+        }
+
+        .stack-item.medium {
+            border-left-color: #FF9800;
+        }
+
+        .stack-item.hard {
+            border-left-color: #f44336;
+        }
+
+        .item-level {
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+
+        .item-time {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .empty-stack {
+            text-align: center;
+            opacity: 0.6;
+            font-style: italic;
+            padding: 40px;
+        }
+
+        .audio-controls {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .audio-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .audio-btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-2px);
+        }
+
+        .audio-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            opacity: 0.8;
+        }
+
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.5s ease;
+        }
+
+        .loading-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loading-content {
+            text-align: center;
+            color: white;
+        }
+
+        .loading-title {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .loading-subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 40px;
+            opacity: 0.8;
+        }
+
+        .progress-container {
+            width: 400px;
+            max-width: 80vw;
+            margin-bottom: 20px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #2196F3);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .progress-text {
+            font-size: 1rem;
+            margin-bottom: 10px;
+        }
+
+        .loading-details {
+            font-size: 0.9rem;
+            opacity: 0.7;
+            min-height: 20px;
+        }
+
+        .loading-spinner {
+            margin: 20px 0;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .file-list {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            max-width: 500px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .file-category {
+            margin-bottom: 10px;
+        }
+
+        .file-category-title {
+            font-weight: bold;
+            color: #4CAF50;
+            margin-bottom: 5px;
+        }
+
+        .file-item {
+            font-size: 0.8rem;
+            opacity: 0.8;
+            margin-left: 10px;
+        }
+
+        .file-item.loaded {
+            color: #4CAF50;
+        }
+
+        .file-item.loading {
+            color: #FF9800;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes newItem {
+            0% {
+                opacity: 0;
+                transform: scale(0.8) translateY(-20px);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .logs {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            max-width: 300px;
+            max-height: 200px;
+            overflow-y: auto;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔊 Audio Stack Monitor</h1>
+            <p>Real-time stack monitoring with audio feedback</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="stackStatus"></div>
+                <span id="stackStatusText">Connecting to Stack Server...</span>
+            </div>
+            <div class="status-indicator">
+                <div class="status-dot" id="audioStatus"></div>
+                <span id="audioStatusText">Loading Audio...</span>
+            </div>
+        </div>
+
+        <div class="stack-container">
+            <div class="stack-header">
+                <div class="stack-title">Current Stack</div>
+                <div class="stack-size" id="stackSize">Size: 0</div>
+            </div>
+            
+            <div class="stack-items" id="stackItems">
+                <div class="empty-stack">Waiting for audio initialization...</div>
+            </div>
+
+            <div class="audio-controls">
+                <button class="audio-btn" id="muteBtn" onclick="toggleMute()">🔊 Mute</button>
+                <button class="audio-btn" onclick="testAudio()">🎵 Test Audio</button>
+                <button class="audio-btn" onclick="clearStack()">🗑️ Clear Stack</button>
+                <button class="audio-btn" onclick="clearAudioQueue()">⏹️ Stop Audio</button>
+            </div>
+            
+            <div class="audio-queue-status" id="audioQueueStatus" style="margin-top: 15px; text-align: center; opacity: 0.8; font-size: 0.9rem;">
+                Audio queue: Empty
+            </div>
+        </div>
+    </div>
+
+    <div class="logs" id="logs"></div>
+
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loading-content">
+            <div class="loading-title">🔊 Audio Stack Monitor</div>
+            <div class="loading-subtitle">Initializing audio cache...</div>
+            
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text" id="progressText">Connecting to servers...</div>
+                <div class="loading-details" id="loadingDetails">Checking server availability...</div>
+            </div>
+
+            <div class="loading-spinner">
+                <div class="spinner"></div>
+            </div>
+
+            <div class="file-list" id="fileList" style="display: none;">
+                <div id="fileListContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const STACK_SERVER_URL = 'http://localhost:5000';
+        const AUDIO_SERVER_URL = 'http://localhost:5001';
+        const POLL_INTERVAL = 500; // 500ms
+
+        // State
+        let currentStack = [];
+        let audioFiles = {};
+        let cachedAudio = {};
+        let isMuted = false;
+        let isPolling = false;
+        let audioQueue = [];
+        let isPlayingQueue = false;
+
+        // Elements
+        const stackItems = document.getElementById('stackItems');
+        const stackSize = document.getElementById('stackSize');
+        const stackStatus = document.getElementById('stackStatus');
+        const stackStatusText = document.getElementById('stackStatusText');
+        const audioStatus = document.getElementById('audioStatus');
+        const audioStatusText = document.getElementById('audioStatusText');
+        const muteBtn = document.getElementById('muteBtn');
+        const logs = document.getElementById('logs');
+        
+        // Loading screen elements
+        const loadingScreen = document.getElementById('loadingScreen');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const loadingDetails = document.getElementById('loadingDetails');
+        const fileList = document.getElementById('fileList');
+        const fileListContent = document.getElementById('fileListContent');
+        const audioQueueStatus = document.getElementById('audioQueueStatus');
+
+        // Update loading progress
+        function updateProgress(percentage, text, details = '') {
+            progressFill.style.width = `${percentage}%`;
+            progressText.textContent = text;
+            loadingDetails.textContent = details;
+        }
+
+        // Show file list during loading
+        function displayFileList(audioFiles) {
+            fileList.style.display = 'block';
+            fileListContent.innerHTML = '';
+            
+            Object.entries(audioFiles).forEach(([level, files]) => {
+                if (files.length > 0) {
+                    const categoryDiv = document.createElement('div');
+                    categoryDiv.className = 'file-category';
+                    
+                    const titleDiv = document.createElement('div');
+                    titleDiv.className = 'file-category-title';
+                    titleDiv.textContent = `${level.toUpperCase()} (${files.length} files)`;
+                    categoryDiv.appendChild(titleDiv);
+                    
+                    files.forEach(file => {
+                        const fileDiv = document.createElement('div');
+                        fileDiv.className = 'file-item';
+                        fileDiv.id = `file-${level}-${file}`;
+                        fileDiv.textContent = `📄 ${file}`;
+                        categoryDiv.appendChild(fileDiv);
+                    });
+                    
+                    fileListContent.appendChild(categoryDiv);
+                }
+            });
+        }
+
+        // Mark file as loaded
+        function markFileLoaded(level, file) {
+            const fileElement = document.getElementById(`file-${level}-${file}`);
+            if (fileElement) {
+                fileElement.className = 'file-item loaded';
+                fileElement.textContent = `✅ ${file}`;
+            }
+        }
+
+        // Mark file as loading
+        function markFileLoading(level, file) {
+            const fileElement = document.getElementById(`file-${level}-${file}`);
+            if (fileElement) {
+                fileElement.className = 'file-item loading';
+                fileElement.textContent = `⏳ ${file}`;
+            }
+        }
+
+        // Update audio queue status display
+        function updateQueueStatus() {
+            if (!audioQueueStatus) return;
+            
+            if (audioQueue.length === 0 && !isPlayingQueue) {
+                audioQueueStatus.textContent = 'Audio queue: Empty';
+                audioQueueStatus.style.color = '';
+            } else if (isPlayingQueue) {
+                audioQueueStatus.textContent = `🎵 Playing audio | Queue: ${audioQueue.length} remaining`;
+                audioQueueStatus.style.color = '#4CAF50';
+            } else {
+                audioQueueStatus.textContent = `Audio queue: ${audioQueue.length} pending`;
+                audioQueueStatus.style.color = '#FF9800';
+            }
+        }
+
+        // Clear audio queue
+        function clearAudioQueue() {
+            audioQueue = [];
+            updateQueueStatus();
+            log('Audio queue cleared');
+        }
+        function hideLoadingScreen() {
+            setTimeout(() => {
+                loadingScreen.classList.add('hidden');
+                log('Audio cache initialization complete');
+            }, 500);
+        }
+        function log(message) {
+            const time = new Date().toLocaleTimeString();
+            const logEntry = `[${time}] ${message}`;
+            console.log(logEntry);
+            
+            const logDiv = document.createElement('div');
+            logDiv.textContent = logEntry;
+            logs.appendChild(logDiv);
+            
+            // Keep only last 10 log entries
+            while (logs.children.length > 10) {
+                logs.removeChild(logs.firstChild);
+            }
+            
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        // Initialize audio caching with progress
+        async function initAudio() {
+            try {
+                updateProgress(10, 'Connecting to audio server...', 'Fetching file list...');
+                
+                const response = await fetch(`${AUDIO_SERVER_URL}/audio/list`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                audioFiles = data.audio_files;
+                
+                updateProgress(20, 'Audio file list received', `Found ${Object.keys(audioFiles).length} difficulty categories`);
+                log(`Found audio files: ${JSON.stringify(audioFiles)}`);
+                
+                // Display the file list
+                displayFileList(audioFiles);
+                
+                // Count total files
+                let totalFiles = 0;
+                Object.values(audioFiles).forEach(files => {
+                    totalFiles += files.length;
+                });
+                
+                if (totalFiles === 0) {
+                    updateProgress(100, 'No audio files found', 'The audio directories are empty');
+                    audioStatus.className = 'status-dot connected';
+                    audioStatusText.textContent = 'Audio Ready (No Files)';
+                    hideLoadingScreen();
+                    return;
+                }
+                
+                updateProgress(25, `Loading ${totalFiles} audio files...`, 'Starting download and cache...');
+                
+                // Preload audio files with progress
+                let loadedFiles = 0;
+                const baseProgress = 25;
+                const loadingProgress = 70; // 25% to 95%
+                
+                for (const [level, files] of Object.entries(audioFiles)) {
+                    cachedAudio[level] = [];
+                    
+                    for (const file of files) {
+                        markFileLoading(level, file);
+                        updateProgress(
+                            baseProgress + (loadedFiles / totalFiles) * loadingProgress,
+                            `Loading audio files... (${loadedFiles + 1}/${totalFiles})`,
+                            `Loading ${level}/${file}`
+                        );
+                        
+                        try {
+                            const audio = new Audio(`${AUDIO_SERVER_URL}/audio/${level}/${file}`);
+                            audio.preload = 'auto';
+                            
+                            // Wait for the audio to load
+                            await new Promise((resolve, reject) => {
+                                const timeout = setTimeout(() => {
+                                    reject(new Error('Audio load timeout'));
+                                }, 5000);
+                                
+                                audio.addEventListener('canplaythrough', () => {
+                                    clearTimeout(timeout);
+                                    resolve();
+                                });
+                                
+                                audio.addEventListener('error', () => {
+                                    clearTimeout(timeout);
+                                    reject(new Error(`Failed to load ${file}`));
+                                });
+                                
+                                // Start loading
+                                audio.load();
+                            });
+                            
+                            cachedAudio[level].push(audio);
+                            markFileLoaded(level, file);
+                            loadedFiles++;
+                            
+                            log(`Cached ${level}/${file}`);
+                            
+                        } catch (error) {
+                            log(`Failed to load ${level}/${file}: ${error.message}`);
+                            markFileLoaded(level, file); // Mark as "loaded" even if failed
+                            loadedFiles++;
+                        }
+                        
+                        // Small delay to make loading visible
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                }
+                
+                updateProgress(95, 'Audio cache complete!', `Successfully loaded ${loadedFiles}/${totalFiles} files`);
+                
+                audioStatus.className = 'status-dot connected';
+                audioStatusText.textContent = 'Audio Ready';
+                
+                updateProgress(100, 'Ready to monitor stack!', 'All systems initialized');
+                
+                // Brief pause to show completion
+                await new Promise(resolve => setTimeout(resolve, 800));
+                
+                // Hide loading screen after a brief moment
+                hideLoadingScreen();
+                
+            } catch (error) {
+                updateProgress(0, 'Audio server connection failed', error.message);
+                audioStatus.className = 'status-dot disconnected';
+                audioStatusText.textContent = 'Audio Server Error';
+                log(`Audio init error: ${error.message}`);
+                
+                // Still hide loading screen after error
+                setTimeout(hideLoadingScreen, 2000);
+            }
+        }
+
+        // Audio queue management
+        function addToAudioQueue(level) {
+            if (isMuted || !cachedAudio[level] || cachedAudio[level].length === 0) {
+                return;
+            }
+            
+            audioQueue.push(level);
+            updateQueueStatus();
+            log(`Added ${level} to audio queue (queue size: ${audioQueue.length})`);
+            
+            // Start processing queue if not already playing
+            if (!isPlayingQueue) {
+                processAudioQueue();
+            }
+        }
+
+        // Process audio queue sequentially
+        async function processAudioQueue() {
+            if (audioQueue.length === 0 || isPlayingQueue) {
+                return;
+            }
+            
+            isPlayingQueue = true;
+            updateQueueStatus();
+            log('Starting audio queue processing');
+            
+            while (audioQueue.length > 0) {
+                const level = audioQueue.shift();
+                updateQueueStatus();
+                await playAudioSync(level);
+                
+                // Small pause between audio files for better UX
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            isPlayingQueue = false;
+            updateQueueStatus();
+            log('Audio queue processing complete');
+        }
+
+        // Play audio synchronously (returns promise that resolves when audio ends)
+        function playAudioSync(level) {
+            return new Promise((resolve) => {
+                if (isMuted || !cachedAudio[level] || cachedAudio[level].length === 0) {
+                    resolve();
+                    return;
+                }
+                
+                try {
+                    // Pick a random audio file for this level
+                    const audioArray = cachedAudio[level];
+                    const randomAudio = audioArray[Math.floor(Math.random() * audioArray.length)];
+                    
+                    // Reset audio to start
+                    randomAudio.currentTime = 0;
+                    
+                    // Set up event listeners
+                    const onEnded = () => {
+                        randomAudio.removeEventListener('ended', onEnded);
+                        randomAudio.removeEventListener('error', onError);
+                        log(`Finished playing ${level} audio`);
+                        resolve();
+                    };
+                    
+                    const onError = () => {
+                        randomAudio.removeEventListener('ended', onEnded);
+                        randomAudio.removeEventListener('error', onError);
+                        log(`Error playing ${level} audio`);
+                        resolve();
+                    };
+                    
+                    randomAudio.addEventListener('ended', onEnded);
+                    randomAudio.addEventListener('error', onError);
+                    
+                    // Start playing
+                    randomAudio.play().then(() => {
+                        log(`Started playing ${level} audio`);
+                    }).catch(e => {
+                        log(`Audio play error for ${level}: ${e.message}`);
+                        randomAudio.removeEventListener('ended', onEnded);
+                        randomAudio.removeEventListener('error', onError);
+                        resolve();
+                    });
+                    
+                } catch (error) {
+                    log(`Error playing ${level} audio: ${error.message}`);
+                    resolve();
+                }
+            });
+        }
+
+        // Legacy play audio function (now uses queue)
+        function playAudio(level) {
+            addToAudioQueue(level);
+        }
+
+        // Poll stack server
+        async function pollStack() {
+            try {
+                const response = await fetch(`${STACK_SERVER_URL}/stack/status`);
+                const data = await response.json();
+                
+                if (!isPolling) {
+                    stackStatus.className = 'status-dot connected';
+                    stackStatusText.textContent = 'Stack Server Connected';
+                    isPolling = true;
+                    log('Connected to stack server');
+                }
+                
+                // Check for new items
+                const newStack = data.current_stack;
+                const newItems = newStack.slice(currentStack.length);
+                
+                if (newItems.length > 0) {
+                    log(`New items detected: ${newItems.join(', ')}`);
+                    // Play audio for each new item
+                    newItems.forEach(item => playAudio(item));
+                }
+                
+                // Update display
+                currentStack = newStack;
+                updateStackDisplay();
+                
+            } catch (error) {
+                if (isPolling) {
+                    stackStatus.className = 'status-dot disconnected';
+                    stackStatusText.textContent = 'Stack Server Disconnected';
+                    isPolling = false;
+                    log(`Stack server error: ${error.message}`);
+                }
+            }
+        }
+
+        // Update stack display
+        function updateStackDisplay() {
+            stackSize.textContent = `Size: ${currentStack.length}`;
+            
+            if (currentStack.length === 0) {
+                stackItems.innerHTML = '<div class="empty-stack">Stack is empty</div>';
+                return;
+            }
+            
+            // Clear current items
+            stackItems.innerHTML = '';
+            
+            // Add items (reverse order to show stack properly)
+            [...currentStack].reverse().forEach((level, index) => {
+                const item = document.createElement('div');
+                item.className = `stack-item ${level}`;
+                
+                // Add 'new' class for recently added items
+                if (index < 3) { // Last 3 items get the "new" animation
+                    setTimeout(() => item.classList.add('new'), 100);
+                }
+                
+                item.innerHTML = `
+                    <span class="item-level">${level}</span>
+                    <span class="item-time">#${currentStack.length - index}</span>
+                `;
+                
+                stackItems.appendChild(item);
+            });
+        }
+
+        // Toggle mute
+        function toggleMute() {
+            isMuted = !isMuted;
+            muteBtn.textContent = isMuted ? '🔇 Unmute' : '🔊 Mute';
+            
+            // Clear audio queue when muting
+            if (isMuted) {
+                clearAudioQueue();
+            }
+            
+            log(`Audio ${isMuted ? 'muted' : 'unmuted'}`);
+        }
+
+        // Test audio
+        function testAudio() {
+            const levels = ['trivial', 'easy', 'medium', 'hard'];
+            const testLevel = levels[Math.floor(Math.random() * levels.length)];
+            addToAudioQueue(testLevel);
+            log(`Testing ${testLevel} audio (added to queue)`);
+        }
+
+        // Clear stack
+        async function clearStack() {
+            try {
+                const response = await fetch(`${STACK_SERVER_URL}/stack`);
+                if (response.ok) {
+                    log('Stack cleared');
+                }
+            } catch (error) {
+                log(`Error clearing stack: ${error.message}`);
+            }
+        }
+
+        // Initialize everything
+        async function init() {
+            log('🚀 Starting Audio Stack Monitor...');
+            
+            // Show loading screen initially
+            loadingScreen.classList.remove('hidden');
+            
+            // Initialize audio with full loading experience
+            await initAudio();
+            
+            // Initialize queue status display
+            updateQueueStatus();
+            
+            // Start polling stack server
+            log('Starting stack monitoring...');
+            setInterval(pollStack, POLL_INTERVAL);
+            
+            // Initial poll
+            pollStack();
+        }
+
+        // Start when page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
