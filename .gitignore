@@ -13,3 +13,7 @@ ENV/
 .ipynb_checkpoints/
 
 __pycache__/
+
+
+audio_extraction/
+youtube_downloads/
